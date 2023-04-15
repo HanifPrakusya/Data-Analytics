@@ -1,0 +1,54 @@
+WITH
+  T1 AS (
+  SELECT
+    FORMAT_DATE('%G-%m', DATE (DATE_TRUNC(created_at, MONTH))) month,
+    product_category category,
+    ROUND(cost,2) cost,
+    ROUND(product_retail_price,2) selling_price,
+    ROUND(product_retail_price-cost,2) profit,
+    FORMAT_DATE('%G-%m', DATE (DATE_TRUNC(sold_at, MONTH))) sold_at,
+    FORMAT_DATE('%G', DATE (DATE_TRUNC(sold_at, YEAR))) year_sold,
+    COUNT(created_at) invent_amount,
+  FROM
+    `bigquery-public-data.thelook_ecommerce.inventory_items` inventory
+  GROUP BY
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7),
+  T2 AS (
+  SELECT
+    *,
+    SUM(selling_price) OVER (PARTITION BY category ORDER BY year_sold) yearly_revenue,
+    SUM(profit) OVER (PARTITION BY category ORDER BY year_sold) yearly_profit,
+    SUM(invent_amount) OVER (PARTITION BY category ORDER BY month) inventm,
+    SUM(selling_price) OVER (PARTITION BY category ORDER BY sold_at) revenuem,
+    SUM (profit) OVER (PARTITION BY category ORDER BY sold_at) profitm,
+  FROM
+    T1),
+  T3 AS (
+  SELECT
+    category,
+    month,
+    sold_at,
+    cost,
+    invent_amount,
+    selling_price,
+    profit,
+    yearly_revenue,
+    yearly_profit,
+    year_sold,
+    (yearly_revenue/LAG(yearly_revenue,1) OVER (PARTITION BY category ORDER BY year_sold ASC)-1) yearly_revenue_growth,
+    (yearly_profit/LAG(yearly_profit,1) OVER (PARTITION BY category ORDER BY year_sold ASC)-1) yearly_profit_growth,
+    (inventm/LAG(inventm,1) OVER (PARTITION BY category ORDER BY month ASC)-1) invent_growth,
+    (revenuem/LAG(revenuem,1) OVER (PARTITION BY category ORDER BY sold_at ASC)-1) revenue_growth,
+    (profitm/LAG(profitm,1) OVER (PARTITION BY category ORDER BY sold_at ASC)-1) profit_growth,
+  FROM
+    T2)
+SELECT
+  *
+FROM
+  T3
